@@ -1,161 +1,137 @@
-# Team 1 – Scope 1 & Scope 2 Emissions Prediction 
-### *Predicting Corporate Greenhouse Gas Emissions Using XGBoost & Advanced Feature Engineering*
+# Team 1 – Predicting Scope 1 & Scope 2 Emissions
+
+This project focuses on estimating company greenhouse gas emissions (Scope 1 and Scope 2) when they aren’t reported. These emissions numbers are important for things like climate-risk scoring, investment decisions, and sustainability reporting.  
+
+Our goal was to build a model that can take in company information (like revenue, sector, geography, ESG data, and external activity indicators) and predict their emissions as accurately as possible.
 
 ---
 
-## 1. Problem Understanding & Hypothesis Setting
+## 1. Problem Understanding & Hypothesis
 
-### **Business Problem**
-Many companies worldwide do not disclose their Scope 1 (direct) or Scope 2 (purchased energy) greenhouse gas emissions.  
-However, financial institutions, regulators, and climate-risk analysts require these values for:
+A lot of companies don’t report emissions, but organizations still need these values. So we wanted to create a method that works even when data is messy or incomplete.
 
-- Climate risk scoring  
-- Portfolio emissions accounting  
-- Alignment with net-zero targets  
-- Sustainability reporting (TCFD, ISSB, etc.)
+### Our Main Hypotheses
 
-### **Project Goal**
-Develop a defensible, scalable, and accurate machine-learning model that predicts Scope 1 & Scope 2 emissions for companies with missing disclosures.
-
-### **Core Hypotheses**
-
-#### **1. Emissions scale *nonlinearly* with revenue**
-Larger firms emit more, but not proportionally.
-
-#### **2. Sector and geography strongly influence emissions**
-Electric grid intensity, sector behavior, and industrial composition vary by country.
-
-#### **3. Log-transforming targets is essential**
-`np.log1p()` stabilizes variance and handles heavy right-skew.
-
-#### **4. Nonlinear tree-based models outperform linear models**
-Due to interaction effects:
-- Revenue × Sector  
-- Sector × Country  
-- Country × ESG performance  
+- **Emissions grow with revenue, but not in a simple linear way.**  
+- **Sector and country matter a lot** because energy sources and industry types vary.  
+- **The data is extremely skewed**, so using `np.log1p` on revenue and the targets should help stabilize the model.  
+- **Nonlinear models like XGBoost should outperform linear regression** because the relationships are complicated (revenue × sector × geography).
 
 ---
 
-## 2. Exhaustive EDA – Identifying Key Pain Points
+## 2. EDA – What We Found
 
-A full exploratory analysis revealed several structural challenges.
+During exploratory data analysis, we noticed a few big issues:
 
-### **Key EDA Findings**
-
-| Issue | What We Observed | Impact | Required Fix |
-|-------|------------------|--------|--------------|
-| Extreme right-skew | Revenue/emissions vary by 10⁶–10⁸× | Unstable gradients | Log-transform revenue & targets |
-| Missing ESG scores | 10–25% missing | Model instability | Median imputation |
-| Geography inconsistencies | Missing country/region codes | Weak geographic patterns | OHE + imputation |
-| Messy external datasets | Duplicates, inconsistent formatting | Leakage & misalignment | Aggregate by entity_id |
-| High feature sparsity | Thousands of OHE features | Dimensionality issues | VarianceThreshold |
+| Issue | What We Saw | Why It’s a Problem | Fix |
+|-------|-------------|-------------------|-----|
+| Extreme right-skew | Revenue & emissions vary by millions | Models behave badly | Log-transform |
+| Missing ESG data | 10–25% missing | Random noise in model | Median impute |
+| Geography gaps | Missing countries/regions | Weak regional patterns | Impute + one-hot encode |
+| Messy external files | Duplicate entities | Data leakage risk | Aggregate by entity_id |
+| Very sparse features | After encoding | Too many low-variance columns | VarianceThreshold |
 
 ---
 
-## 3. Data Engineering & Handling Messy Data
+## 3. Data Engineering
 
-Data engineering had the **largest impact** on final model performance.
+This part took the longest and had the biggest impact on the final model.
 
-### **3.1 Log Transformations**
-Applied `np.log1p()` to:
+### 3.1 Log Transformations  
+We applied `np.log1p()` to:
+
 - Revenue  
 - Scope 1 target  
 - Scope 2 target  
 
-**Benefits:**
-- Reduces skew  
-- Improves gradient stability  
-- Preserves order-of-magnitude relationships  
-- Reduces influence of extreme emitters  
+This helped reduce skew, improve gradients, and prevent huge emitters from dominating the model.
 
-### **3.2 Cleaning & Imputation**
-- ESG scores → **median imputation**  
-- External features (SDGs, environmental indicators, sector splits) → **fill with 0** (“no activity known”)  
-- Removed companies missing essential fields (e.g., revenue)
+### 3.2 Cleaning & Imputation  
 
-### **3.3 External Data Integration**
-Integrated **three external datasets**:
-1. **Sector revenue shares** → converted to % of total revenue  
-2. **Environmental activity file** → summed adjustments by entity  
-3. **SDG indicators** → one-hot encoded & aggregated  
+- ESG scores → median  
+- External dataset features → fill with **0** (meaning “no known activity”)  
+- Removed rows missing essential fields
 
-### **3.4 Feature Encoding & Scaling**
+### 3.3 External Dataset Integration  
+We combined three extra datasets:
 
-| Step | Method |
-|------|--------|
-| Geographic Encoding | One-Hot Encoding (country, region) |
-| Scaling | StandardScaler |
-| Dimensionality Reduction | VarianceThreshold(0.05) |
-| Train/Test Alignment | Reindex test to training columns |
+- Sector revenue shares (converted to %)  
+- Environmental activity totals per entity  
+- SDG participation indicators (one-hot encoded)
+
+### 3.4 Encoding & Scaling  
+
+- One-hot encoding for country and region  
+- Standard scaling for numeric features  
+- VarianceThreshold to drop near-zero columns  
+- Reindexed test set so it matches training columns exactly
 
 ---
 
-## 4. Model Selection & Experimentation
+## 4. Model Selection
 
-### **Benchmarked Models**
+We tested different models:
 
-| Model | Performance | Observed Behavior |
-|-------|-------------|-------------------|
-| Linear Regression | ❌ Poor | Underfit due to nonlinear interactions |
-| LightGBM | ⚠️ Mixed | Good for very large datasets; unstable here |
-| XGBoost | ✅ Best | Strong, stable, robust for sparse tabular data |
+| Model | Result | Notes |
+|-------|--------|-------|
+| Linear Regression | ❌ Poor | Couldn’t handle nonlinear behavior |
+| LightGBM | ⚠️ Mixed | Sometimes good, sometimes unstable |
+| XGBoost | ✅ Best | Most consistent and strongest performance |
 
-### **Why XGBoost Was Selected**
-- Captures **nonlinear** revenue–sector–geography relationships  
-- Handles **sparse OHE features** efficiently  
-- Built-in **regularization**  
-- Excellent performance across **5-fold CV**  
-- Robust to outliers (log-space training)
+### Why We Picked XGBoost
 
-**Final choice:** Train **two separate XGBoost regressors** (Scope 1 & Scope 2).
+- Good at nonlinear interactions  
+- Works well with sparse one-hot encoded features  
+- Strong regularization  
+- Stable across folds  
+- Handles outliers nicely (especially in log space)
 
----
-
-## 5. Model Tweaking & Hyperparameter Tuning
-
-### **Core Hyperparameters**
-
-| Parameter | Value | Purpose |
-|-----------|--------|---------|
-| n_estimators | 3000 | Allows deep learning with early stopping |
-| early_stopping_rounds | 50 | Prevents overfitting |
-| learning_rate | 0.03 | Stable convergence |
-| max_depth | 8 | Captures complex interactions |
-| subsample | 0.9 | Regularization |
-| colsample_bytree | 0.9 | Prevent feature dependency |
-| eval_metric | "rmse" | Optimized for log-space RMSE |
-
-### **Tuning Strategy**
-- Manual search informed by domain intuition  
-- 5-fold CV for stability  
-- Log-space training for variance control  
+We trained **two separate XGBoost models**: one for Scope 1 and one for Scope 2.
 
 ---
 
-## 6. Final Evaluation & Business Tie-Back
+## 5. Hyperparameter Tuning
 
-### **Cross-Validation Results (Log Space)**
+Here are the most important parameters:
 
-| Target | Mean RMSE | Interpretation |
-|--------|-----------|----------------|
-| **Scope 1** | **1.9405** | Predicts within ~2 logits |
-| **Scope 2** | **2.4309** | Harder to model, but stable |
+| Parameter | Value | Why |
+|----------|--------|------|
+| `n_estimators` | 3000 | Allows depth + early stopping |
+| `learning_rate` | 0.03 | Stable training |
+| `max_depth` | 8 | Captures interactions |
+| `subsample` | 0.9 | Regularization |
+| `colsample_bytree` | 0.9 | Avoids feature dependence |
+| `early_stopping_rounds` | 50 | Prevents overfitting |
+| `eval_metric` | rmse | Matches our goal |
 
----
-
-## Why This Matters to the Business
-
-| Business Requirement | Model Contribution |
-|----------------------|--------------------|
-| Fill missing emissions | ✔ Predicts non-negative tCO₂e for all firms |
-| Portfolio climate-risk scoring | ✔ Low CV variance → reliable predictions |
-| Benchmarking | ✔ Log-space accuracy preserves magnitude |
-| Prioritize large emitters | ✔ Correctly identifies high-impact outliers |
-
-### **Business Impact**
-- Enables **regulatory-grade emissions estimation**  
-- Supports **financial climate stress testing**  
-- Fills **global disclosure gaps at scale**  
+We tuned using manual search + 5-fold cross-validation.
 
 ---
+
+## 6. Final Evaluation & Business Impact
+
+### Cross-Validation Scores (Log Space)
+
+| Target | Mean RMSE | Notes |
+|--------|------------|-------|
+| **Scope 1** | **1.9405** | Predictions are stable |
+| **Scope 2** | **2.4309** | Harder target but still consistent |
+
+### Why This Matters
+
+Even though this is a machine learning project, it ties directly to real applications:
+
+| Business Need | How Our Model Helps |
+|----------------|----------------------|
+| Fill missing emissions values | Predicts realistic non-negative numbers |
+| Portfolio risk scoring | Low variance → stable results |
+| Emissions comparisons | Log RMSE preserves scale relationships |
+| Identifying large emitters | Good at ranking by magnitude |
+
+### Big Picture Impact
+
+- Helps financial institutions understand climate exposure  
+- Supports regulatory reporting  
+- Provides emissions estimates for companies that never disclosed them  
+
 
