@@ -71,9 +71,9 @@ We tested different models:
 
 | Model | Result | Notes |
 |-------|--------|-------|
-| Linear Regression | ❌ Poor | Couldn’t handle nonlinear behavior |
-| LightGBM | ⚠️ Mixed | Sometimes good, required larger data |
-| XGBoost | ✅ Best | Most consistent and strongest performance |
+| Linear Regression | Poor | Couldn’t handle nonlinear behavior |
+| LightGBM | Poor | Sometimes good, required larger data |
+| XGBoost | Best | Most consistent and strongest performance |
 
 ### Why We Picked XGBoost
 
