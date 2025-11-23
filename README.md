@@ -8,7 +8,7 @@ Our goal was to build a model that can take in company information (like revenue
 
 ## 1. Problem Understanding & Hypothesis
 
-A lot of companies don’t report emissions, but organizations still need these values. So we wanted to create a method that works even when data is messy or incomplete.
+A lot of companies don’t report their own emissions, but organizations still need these values.
 
 ### Our Main Hypotheses
 
@@ -21,23 +21,21 @@ A lot of companies don’t report emissions, but organizations still need these 
 
 ## 2. EDA – What We Found
 
-During exploratory data analysis, we noticed a few big issues:
+During our exploratory data analysis (EDA), we found several important issues with the dataset. Even though the data was relatively clean (no repeated companies and no missing region info), there were still a few challenges we had to fix before modeling.
 
 | Issue | What We Saw | Why It’s a Problem | Fix |
 |-------|-------------|-------------------|-----|
-| Extreme right-skew | Revenue & emissions vary by millions | Models behave badly | Log-transform |
-| Missing ESG data | 10–25% missing | Random noise in model | Median impute |
-| Geography gaps | Missing countries/regions | Weak regional patterns | Impute + one-hot encode |
-| Messy external files | Duplicate entities | Data leakage risk | Aggregate by entity_id |
-| Very sparse features | After encoding | Too many low-variance columns | VarianceThreshold |
+| Extreme right-skew | Revenue and emissions values were extremely large and spread out | Makes training unstable and hurts model accuracy | Apply `np.log1p` to reduce skew |
+| Missing ESG data | Some ESG scores were missing | Missing values confuse the model | Fill with median values |
+| High feature sparsity | One-hot encoding created a lot of columns, many barely used | Adds noise and slows training | Use `VarianceThreshold` to drop low-variance columns |
+| External data inconsistencies | External datasets weren't aligned (different formats, multiple rows per entity, etc.) | Hard to merge with main dataset | Clean and aggregate by `entity_id` |
+| Imbalanced feature scales | Some numeric features were huge compared to others | Can distort model behavior | Scale using `StandardScaler` |
 
 ---
 
 ## 3. Data Engineering
 
-This part took the longest and had the biggest impact on the final model.
-
-### 3.1 Log Transformations  
+### Log Transformations  
 We applied `np.log1p()` to:
 
 - Revenue  
@@ -46,26 +44,25 @@ We applied `np.log1p()` to:
 
 This helped reduce skew, improve gradients, and prevent huge emitters from dominating the model.
 
-### 3.2 Cleaning & Imputation  
+### Cleaning & Imputation  
 
 - ESG scores → median  
 - External dataset features → fill with **0** (meaning “no known activity”)  
 - Removed rows missing essential fields
 
-### 3.3 External Dataset Integration  
+### External Dataset Integration  
 We combined three extra datasets:
 
 - Sector revenue shares (converted to %)  
 - Environmental activity totals per entity  
 - SDG participation indicators (one-hot encoded)
 
-### 3.4 Encoding & Scaling  
+### Encoding & Scaling  
 
 - One-hot encoding for country and region  
 - Standard scaling for numeric features  
-- VarianceThreshold to drop near-zero columns  
-- Reindexed test set so it matches training columns exactly
-
+- VarianceThreshold to drop near-zero columns
+  
 ---
 
 ## 4. Model Selection
@@ -75,16 +72,16 @@ We tested different models:
 | Model | Result | Notes |
 |-------|--------|-------|
 | Linear Regression | ❌ Poor | Couldn’t handle nonlinear behavior |
-| LightGBM | ⚠️ Mixed | Sometimes good, sometimes unstable |
+| LightGBM | ⚠️ Mixed | Sometimes good, required larger data |
 | XGBoost | ✅ Best | Most consistent and strongest performance |
 
 ### Why We Picked XGBoost
 
 - Good at nonlinear interactions  
 - Works well with sparse one-hot encoded features  
-- Strong regularization  
+- Strong regularization 
 - Stable across folds  
-- Handles outliers nicely (especially in log space)
+- Handles outliers nicely 
 
 We trained **two separate XGBoost models**: one for Scope 1 and one for Scope 2.
 
@@ -132,6 +129,6 @@ Even though this is a machine learning project, it ties directly to real applica
 
 - Helps financial institutions understand climate exposure  
 - Supports regulatory reporting  
-- Provides emissions estimates for companies that never disclosed them  
+- Provides emissions estimates for companies 
 
 
